@@ -1,0 +1,73 @@
+server.port=8080
+spring.application.name=staff-agent
+
+agent.name=E-commerce Customer Service Assistant
+agent.api-key=YOUR_AGENT_API_KEY
+
+intent.confidence-threshold=0.7
+conversation.timeout-minutes=30
+conversation.cleanup-interval-ms=300000
+
+dify.enabled=true
+dify.base-url=https://api.dify.ai/v1
+dify.api-key=YOUR_DIFY_API_KEY
+dify.dataset-id=YOUR_DATASET_ID
+dify.top-k=3
+dify.score-threshold=0.5
+dify.knowledge-base-refresh-interval-ms=3600000
+
+kb.matcher.llm.enabled=true
+kb.matcher.llm.timeout-seconds=15
+kb.matcher.llm.model-name=qwen-max
+kb.matcher.llm.prompt-template=You are a knowledge base classification expert. Please select the most suitable knowledge base from the following list based on the user's intent and query content.
+
+Intent Type: {intentType}
+Intent Description: {intentDescription}
+User Query: {query}
+
+Knowledge Base List:
+{knowledgeBaseList}
+
+Please return the ID of the most suitable knowledge base. If no suitable knowledge base is found, return "DEFAULT".
+
+Return Format:
+Knowledge Base ID: {datasetId}
+
+spring.cloud.openfeign.client.config.default.connect-timeout=10000
+spring.cloud.openfeign.client.config.default.read-timeout=10000
+
+rag.max-records=3
+rag.max-content-length=2000
+rag.prompt-template=You are a professional customer service assistant. Please answer the user's question based on the provided knowledge base content.
+
+Knowledge Base Content:
+{{context}}
+
+User Question: {{query}}
+
+Requirements:
+1. Answer only based on the provided knowledge base content, do not fabricate information
+2. If no relevant information is found in the knowledge base, clearly state "No relevant information available"
+3. Answer should be clear, concise, and organized
+4. You may use Markdown format to improve readability
+
+memory.vector-dimensions=1536
+memory.max-history-count=50
+memory.max-tokens=8000
+memory.top-k=5
+memory.similarity-threshold=0.4
+memory.embedding-model=text-embedding-v1
+memory.summary-enabled=true
+memory.async-embedding=true
+
+qdrant.host=localhost
+qdrant.port=6333
+qdrant.grpc-port=6334
+qdrant.collection-name=conversation_messages
+qdrant.vector-dimensions=1536
+qdrant.distance=cosine
+qdrant.index-type=hnsw
+qdrant.hnsw-m=16
+qdrant.hnsw-ef-construct=100
+qdrant.timeout-seconds=30
+qdrant.auto-create-collection=true
