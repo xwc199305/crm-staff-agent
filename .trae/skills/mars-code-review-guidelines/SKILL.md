@@ -3,15 +3,15 @@ name: mars-code-review-guidelines
 description: |
   Comprehensive MARS code review guidelines covering PR preparation, review standards,
   coding conventions, and review reception. Includes Java/Spring conventions,
-  Python development standards, Salesforce naming standards, and handling review
+  Python development standards, CRM platform naming standards, and handling review
   feedback with technical rigor. Use when preparing code for review, conducting
-  reviews as Tier1/Tier2 reviewer, reviewing Java/Spring/Python/Salesforce code,
+  reviews as Tier1/Tier2 reviewer, reviewing Java/Spring/Python/CRM platform code,
   receiving review feedback, or mentoring developers on review process and coding standards.
   NOT for: general coding questions, technical implementation help, or non-MARS projects.
 metadata:
   version: 1.1.0
   author: Mars Agent Skills
-  tags: [code-review, guidelines, mars, pr-review, team-process, java, spring, python, salesforce, naming-conventions, mcp, agent-tools]
+  tags: [code-review, guidelines, mars, pr-review, team-process, java, spring, python, crm-platform, naming-conventions, mcp, agent-tools]
 ---
 
 # MARS Code Review Guidelines Skill
@@ -26,7 +26,7 @@ This skill provides comprehensive MARS code review guidelines covering:
 - Team review process workflow
 - **MARS Coding Conventions** (Java/Spring/API)
 - **Python Development Standards** (Project structure, tooling, best practices)
-- **Salesforce Naming Conventions** (Apex/Objects/Fields)
+- **CRM Platform Naming Conventions** (Apex/Objects/Fields)
 - **MCP Tools Review Guidelines** (Agent-friendly design, envelope pattern, error handling)
 - **Receiving Code Review** (handling feedback with technical rigor)
 
@@ -68,9 +68,9 @@ IF code contains Python patterns:
   → Load references/python-conventions.md
   → Follow Section 8: Python Development Standards Review
 
-IF code contains Salesforce/Apex patterns:
-  → Load references/salesforce-conventions.md
-  → Follow Section 9: Salesforce Naming Conventions Review
+IF code contains CRM platform/Apex patterns:
+  → Load references/crm-platform-conventions.md
+  → Follow Section 9: CRM Platform Naming Conventions Review
 
 IF code contains MCP patterns (@Tool, @ToolParam, MCP SDK, McpServer):
   → Load references/mcp-tools-conventions.md
@@ -86,7 +86,7 @@ IF multiple languages present:
 |----------|----------------|----------------|
 | Java | `.java` | `@RestController`, `class XxxService`, `import org.springframework` |
 | Python | `.py` | `def`, `class`, `import`, `async def`, type hints |
-| Salesforce | `.cls`, `.trigger` | `global class`, `ApexPages`, `sObject`, `@AuraEnabled` |
+| CRM Platform | `.cls`, `.trigger` | `global class`, `ApexPages`, `sObject`, `@AuraEnabled` |
 | **MCP Tools** | `.java` | `@Tool`, `@ToolParam`, `McpServer`, `ToolExecutionException`, `McpToolResponse` |
 
 ### 2. PR Preparation (For Author)
@@ -121,7 +121,7 @@ Determine PR size by line count:
 
 #### 2.2 Write Good PR Description
 
-Follow [Conventional Commits](https://salesforce-china.quip.com/5WL2AXUMZYuM) format.
+Follow Conventional Commits format.
 
 **Bad Descriptions:**
 - "Fix bug"
@@ -194,7 +194,7 @@ This replaces the methods on Borglet that delegate to a TimeKeeper.
 #### 3.2 Review Principles
 
 1. **Technical facts and data** overrule opinions
-2. **[Style guide](https://salesforce-china.quip.com/gKz9AWm8jqii)** is absolute authority for style
+2. **Style guide** is absolute authority for style
 3. **Software design** is based on principles, not personal preference
 4. **Consistency** with current codebase if no other rule applies
 
@@ -398,9 +398,9 @@ Follow Zen of Python principles:
 - Readability counts
 - There should be one obvious way to do it
 
-### 9. Salesforce Naming Conventions Review
+### 9. CRM Platform Naming Conventions Review
 
-When reviewing Salesforce code, check:
+When reviewing CRM platform code, check:
 
 #### 9.1 Custom Objects
 - Singular form, no underscores (e.g., `CustomerAsset` not `Customer_Assets`)
@@ -697,19 +697,17 @@ Load reference materials based on detected language (see Section 0):
 **Language-Specific (auto-select):**
 - `references/java-conventions.md` - Java/Spring coding conventions
 - `references/python-conventions.md` - Python development standards
-- `references/salesforce-conventions.md` - Salesforce naming conventions
+- `references/crm-platform-conventions.md` - CRM platform naming conventions
 - `references/mcp-tools-conventions.md` - MCP Tools review guidelines
 
 **External References:**
-- [MARS Coding Conventions](https://salesforce-china.quip.com/gKz9AWm8jqii)
-- [Code Review Checklist](https://salesforce-china.quip.com/ZTkZAWcIB9DD)
 - [AWS Labs MCP Design Guidelines](https://github.com/awslabs/mcp/blob/main/DESIGN_GUIDELINES.md)
 - [MCP Tool Naming Specification (SEP-986)](https://modelcontextprotocol.io/community/seps/986-specify-format-for-tool-names.md)
 
 ## Notes
 
 - This skill consolidates MARS team review process, coding conventions, and feedback handling
-- Replaces separate skills: `mars-coding-conventions`, `salesforce-naming-conventions`, `receiving-code-review`
+- Replaces separate skills: `mars-coding-conventions`, `crm-platform-naming-conventions`, `receiving-code-review`
 - **New**: Includes MCP Tools Review Guidelines for agent-friendly tool development
 - For general code quality checks (non-MARS specific), use `code-review` skill
 - Tier1/Tier2 model is specific to MARS team structure

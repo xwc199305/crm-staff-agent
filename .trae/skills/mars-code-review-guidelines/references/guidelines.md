@@ -154,8 +154,6 @@ User: "Full review including good practices"
 
 ## External References
 
-- [MARS Coding Conventions](https://salesforce-china.quip.com/gKz9AWm8jqii)
-- [Code Review Checklist](https://salesforce-china.quip.com/ZTkZAWcIB9DD)
 - [Google Engineering Practices](https://google.github.io/eng-practices/)
 - [Thoughtbot Code Review Guide](https://github.com/thoughtbot/guides/tree/main/code-review)
 - [Palantir Code Review Best Practices](https://blog.palantir.com/code-review-best-practices-19e02780015f)

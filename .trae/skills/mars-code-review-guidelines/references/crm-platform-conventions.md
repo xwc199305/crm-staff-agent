@@ -1,4 +1,4 @@
-# Salesforce Platform Naming Conventions Reference
+# CRM Platform Naming Conventions Reference
 
 ## Table of Contents
 1. [Custom Objects](#custom-objects)
