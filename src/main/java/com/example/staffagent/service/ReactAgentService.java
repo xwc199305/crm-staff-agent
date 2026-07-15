@@ -5,7 +5,7 @@ import com.example.staffagent.dto.IntentResult;
 
 public interface ReactAgentService {
     String call(String userInput);
-    ChatResponse chatWithIntent(String userInput, String sessionId);
+    ChatResponse chatWithIntent(String userId, String userInput, String sessionId);
     IntentResult recognizeIntent(String userInput);
     String getName();
 }

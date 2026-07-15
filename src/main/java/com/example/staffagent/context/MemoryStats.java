@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MemoryStats {
+    private String userId;
     private String sessionId;
     private int messageCount;
     private int tokenCount;

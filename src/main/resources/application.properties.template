@@ -51,6 +51,7 @@ Requirements:
 3. Answer should be clear, concise, and organized
 4. You may use Markdown format to improve readability
 
+memory.mode=native
 memory.vector-dimensions=1536
 memory.max-history-count=50
 memory.max-tokens=8000
@@ -59,6 +60,11 @@ memory.similarity-threshold=0.4
 memory.embedding-model=text-embedding-v1
 memory.summary-enabled=true
 memory.async-embedding=true
+
+memory.user-scoped=true
+memory.extraction-enabled=true
+memory.extraction-threshold=0.3
+memory.max-memory-items-per-user=1000
 
 qdrant.host=localhost
 qdrant.port=6333
@@ -71,3 +77,8 @@ qdrant.hnsw-m=16
 qdrant.hnsw-ef-construct=100
 qdrant.timeout-seconds=30
 qdrant.auto-create-collection=true
+
+mem0.enabled=true
+mem0.server-url=http://localhost:8283
+mem0.infer=true
+mem0.top-k=5

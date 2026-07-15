@@ -165,10 +165,10 @@ public class ReactAgentWithToolsServiceImpl implements ReactAgentService {
     }
 
     @Override
-    public ChatResponse chatWithIntent(String userInput, String sessionId) {
-        log.info("Chatting with intent recognition (ReAct mode), sessionId={}, input={}", sessionId, userInput);
+    public ChatResponse chatWithIntent(String userId, String userInput, String sessionId) {
+        log.info("Chatting with intent recognition (ReAct mode), userId={}, sessionId={}, input={}", userId, sessionId, userInput);
 
-        String context = memoryManager.buildContext(sessionId, userInput);
+        String context = memoryManager.buildContext(userId, sessionId, userInput);
         log.debug("Context length: {}", context.length());
 
         IntentResult intentResult = intentRecognizer.recognize(userInput);
@@ -182,8 +182,8 @@ public class ReactAgentWithToolsServiceImpl implements ReactAgentService {
             reply = DEFAULT_REPLY;
         }
 
-        memoryManager.addMessage(sessionId, "user", userInput);
-        memoryManager.addMessage(sessionId, "assistant", reply);
+        memoryManager.addMessage(userId, sessionId, "user", userInput);
+        memoryManager.addMessage(userId, sessionId, "assistant", reply);
 
         return ChatResponse.builder()
                 .reply(reply)

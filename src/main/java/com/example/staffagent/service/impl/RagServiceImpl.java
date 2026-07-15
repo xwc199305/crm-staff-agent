@@ -1,5 +1,6 @@
 package com.example.staffagent.service.impl;
 
+import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.dify.DifyKnowledgeBaseService;
 import com.example.staffagent.dify.dto.DifyResponse;
 import com.example.staffagent.service.RagService;
@@ -61,6 +62,13 @@ public class RagServiceImpl implements RagService {
                     .collect(Collectors.toList());
 
             String context = recordsToJson(limitedRecords);
+            
+            String historyContext = ConversationContextHolder.getContext();
+            if (historyContext != null && !historyContext.isEmpty()) {
+                context = historyContext + "\n\n[Knowledge Base Context]:\n" + context;
+                log.debug("Added history context to RAG generation, history length={}", historyContext.length());
+            }
+            
             String prompt = buildPrompt(query, context);
 
             log.debug("Generated RAG prompt, context length={}", context.length());

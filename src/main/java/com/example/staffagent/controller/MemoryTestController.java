@@ -32,6 +32,7 @@ public class MemoryTestController {
 
     @PostMapping("/add-message")
     public ApiResponse<String> addMessage(@RequestBody Map<String, String> request) {
+        String userId = request.getOrDefault("userId", "test-user-001");
         String sessionId = request.getOrDefault("sessionId", "test-session-001");
         String role = request.getOrDefault("role", "user");
         String content = request.get("content");
@@ -40,14 +41,15 @@ public class MemoryTestController {
             return ApiResponse.error("Content cannot be empty");
         }
 
-        memoryManager.addMessage(sessionId, role, content);
-        log.info("Added message to Memory, sessionId={}, role={}, contentLength={}", sessionId, role, content.length());
+        memoryManager.addMessage(userId, sessionId, role, content);
+        log.info("Added message to Memory, userId={}, sessionId={}, role={}, contentLength={}", userId, sessionId, role, content.length());
 
         return ApiResponse.success("Message added successfully");
     }
 
     @PostMapping("/retrieve")
     public ApiResponse<List<ChatMessage>> retrieveMessages(@RequestBody Map<String, String> request) {
+        String userId = request.getOrDefault("userId", "test-user-001");
         String sessionId = request.getOrDefault("sessionId", "test-session-001");
         String query = request.get("query");
 
@@ -55,14 +57,15 @@ public class MemoryTestController {
             return ApiResponse.error("Query content cannot be empty");
         }
 
-        List<ChatMessage> messages = memoryManager.retrieveRelevantMessages(sessionId, query);
-        log.info("Retrieved {} relevant messages", messages.size());
+        List<ChatMessage> messages = memoryManager.retrieveRelevantMessages(userId, sessionId, query);
+        log.info("Retrieved {} relevant messages for userId {}", messages.size(), userId);
 
         return ApiResponse.success(messages);
     }
 
     @PostMapping("/build-context")
     public ApiResponse<String> buildContext(@RequestBody Map<String, String> request) {
+        String userId = request.getOrDefault("userId", "test-user-001");
         String sessionId = request.getOrDefault("sessionId", "test-session-001");
         String query = request.get("query");
 
@@ -70,63 +73,68 @@ public class MemoryTestController {
             return ApiResponse.error("Query content cannot be empty");
         }
 
-        String context = memoryManager.buildContext(sessionId, query);
-        log.info("Context length: {}", context.length());
+        String context = memoryManager.buildContext(userId, sessionId, query);
+        log.info("Context length for userId {}: {}", userId, context.length());
 
         return ApiResponse.success(context);
     }
 
     @PostMapping("/generate-summary")
     public ApiResponse<String> generateSummary(@RequestBody Map<String, String> request) {
+        String userId = request.getOrDefault("userId", "test-user-001");
         String sessionId = request.getOrDefault("sessionId", "test-session-001");
 
-        String summary = memoryManager.generateSummary(sessionId);
-        log.info("Generated summary: {}", summary);
+        String summary = memoryManager.generateSummary(userId, sessionId);
+        log.info("Generated summary for userId {}: {}", userId, summary);
 
         return ApiResponse.success(summary);
     }
 
     @PostMapping("/stats")
     public ApiResponse<MemoryStats> getStats(@RequestBody Map<String, String> request) {
+        String userId = request.getOrDefault("userId", "test-user-001");
         String sessionId = request.getOrDefault("sessionId", "test-session-001");
 
-        MemoryStats stats = memoryManager.getMemoryStats(sessionId);
-        log.info("Memory stats: {}", stats);
+        MemoryStats stats = memoryManager.getMemoryStats(userId, sessionId);
+        log.info("Memory stats for userId {}: {}", userId, stats);
 
         return ApiResponse.success(stats);
     }
 
     @PostMapping("/clear")
     public ApiResponse<String> clearMemory(@RequestBody Map<String, String> request) {
+        String userId = request.getOrDefault("userId", "test-user-001");
         String sessionId = request.getOrDefault("sessionId", "test-session-001");
 
-        memoryManager.clearMemory(sessionId);
-        log.info("Cleared Memory, sessionId={}", sessionId);
+        memoryManager.clearMemory(userId, sessionId);
+        log.info("Cleared Memory, userId={}, sessionId={}", userId, sessionId);
 
         return ApiResponse.success("Memory cleared successfully");
     }
 
     @PostMapping("/test-roundtrip")
     public ApiResponse<Map<String, Object>> testRoundtrip(@RequestBody Map<String, String> request) {
+        String userId = request.getOrDefault("userId", "test-user-001");
         String sessionId = request.getOrDefault("sessionId", "test-session-" + System.currentTimeMillis());
         String content1 = request.getOrDefault("content1", "How to use Prompt Builder to create prompts?");
         String content2 = request.getOrDefault("content2", "What is the product warranty policy?");
         String query = request.getOrDefault("query", "prompt");
 
-        log.info("Starting Qdrant roundtrip test, sessionId={}", sessionId);
+        log.info("Starting Qdrant roundtrip test, userId={}, sessionId={}", userId, sessionId);
 
-        memoryManager.addMessage(sessionId, "user", content1);
-        memoryManager.addMessage(sessionId, "assistant", "Prompt Builder is a visual tool for creating and managing prompt templates.");
-        memoryManager.addMessage(sessionId, "user", content2);
-        memoryManager.addMessage(sessionId, "assistant", "Our product provides one year of free warranty service.");
+        memoryManager.addMessage(userId, sessionId, "user", content1);
+        memoryManager.addMessage(userId, sessionId, "assistant", "Prompt Builder is a visual tool for creating and managing prompt templates.");
+        memoryManager.addMessage(userId, sessionId, "user", content2);
+        memoryManager.addMessage(userId, sessionId, "assistant", "Our product provides one year of free warranty service.");
 
-        MemoryStats stats = memoryManager.getMemoryStats(sessionId);
+        MemoryStats stats = memoryManager.getMemoryStats(userId, sessionId);
 
-        List<ChatMessage> retrieved = memoryManager.retrieveRelevantMessages(sessionId, query);
+        List<ChatMessage> retrieved = memoryManager.retrieveRelevantMessages(userId, sessionId, query);
 
-        String context = memoryManager.buildContext(sessionId, query);
+        String context = memoryManager.buildContext(userId, sessionId, query);
 
         return ApiResponse.success(Map.of(
+                "userId", userId,
                 "sessionId", sessionId,
                 "stats", stats,
                 "retrievedMessageCount", retrieved.size(),

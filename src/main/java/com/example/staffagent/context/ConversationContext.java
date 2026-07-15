@@ -15,6 +15,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ConversationContext {
+    private String userId;
     private String sessionId;
     private IntentType lastIntent;
     private String lastQuery;

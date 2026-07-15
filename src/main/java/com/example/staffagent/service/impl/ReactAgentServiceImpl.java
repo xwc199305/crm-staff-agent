@@ -1,5 +1,6 @@
 package com.example.staffagent.service.impl;
 
+import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.context.ConversationMemoryManager;
 import com.example.staffagent.dto.ChatResponse;
 import com.example.staffagent.dto.IntentResult;
@@ -95,36 +96,41 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     }
 
     @Override
-    public ChatResponse chatWithIntent(String userInput, String sessionId) {
-        log.info("Chatting with intent recognition, sessionId={}, input={}", sessionId, userInput);
+    public ChatResponse chatWithIntent(String userId, String userInput, String sessionId) {
+        log.info("Chatting with intent recognition, userId={}, sessionId={}, input={}", userId, sessionId, userInput);
 
-        String context = memoryManager.buildContext(sessionId, userInput);
-        log.debug("Context length: {}", context.length());
+        String context = memoryManager.buildContext(userId, sessionId, userInput);
+        log.info("Context built, length={}, contains mem0 memories={}", context.length(), context.contains("mem0"));
 
-        IntentResult intentResult = intentRecognizer.recognize(userInput);
-        IntentType intentType = intentResult.getIntentType();
+        ConversationContextHolder.setContext(context);
 
-        String reply;
-        if (intentType == IntentType.UNKNOWN) {
-            reply = DEFAULT_REPLY;
-            log.info("Intent recognized as UNKNOWN, returning fallback reply");
-        } else if (handlerFactory.hasHandler(intentType)) {
-            reply = handlerFactory.handleWithToolCall(userInput, intentType);
-            log.info("Intent handler responded: {} -> {}", intentType, reply);
-        } else {
-            reply = DEFAULT_REPLY;
-            log.info("No handler found for intent: {}, returning fallback reply", intentType);
+        try {
+            IntentResult intentResult = intentRecognizer.recognize(userInput);
+            IntentType intentType = intentResult.getIntentType();
+
+            String reply;
+            if (intentType == IntentType.UNKNOWN) {
+                reply = DEFAULT_REPLY;
+                log.info("Intent recognized as UNKNOWN, returning fallback reply");
+            } else if (handlerFactory.hasHandler(intentType)) {
+                reply = handlerFactory.handleWithToolCall(userInput, intentType);
+                log.info("Intent handler responded: {} -> {}", intentType, reply);
+            } else {
+                reply = DEFAULT_REPLY;
+                log.info("No handler found for intent: {}, returning fallback reply", intentType);
+            }
+
+            memoryManager.addMessagePair(userId, sessionId, userInput, reply);
+
+            return ChatResponse.builder()
+                    .reply(reply)
+                    .intentType(intentType)
+                    .intentDescription(intentType.getDescription())
+                    .intentConfidence(intentResult.getConfidence())
+                    .build();
+        } finally {
+            ConversationContextHolder.clearContext();
         }
-
-        memoryManager.addMessage(sessionId, "user", userInput);
-        memoryManager.addMessage(sessionId, "assistant", reply);
-
-        return ChatResponse.builder()
-                .reply(reply)
-                .intentType(intentType)
-                .intentDescription(intentType.getDescription())
-                .intentConfidence(intentResult.getConfidence())
-                .build();
     }
 
     @Override

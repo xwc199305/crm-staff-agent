@@ -111,6 +111,7 @@ public class QdrantVectorStore implements VectorStore {
 
             Map<String, Object> payloadIndex = new LinkedHashMap<>();
             payloadIndex.put("session_id", payloadField);
+            payloadIndex.put("user_id", payloadField);
 
             Map<String, Object> createRequest = new LinkedHashMap<>();
             createRequest.put("vectors", vectorsConfig);
@@ -161,6 +162,7 @@ public class QdrantVectorStore implements VectorStore {
                 point.put("vector", vectorList);
 
                 Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("user_id", message.getUserId());
                 payload.put("session_id", message.getSessionId());
                 payload.put("role", message.getRole());
                 payload.put("content", message.getContent());
@@ -209,12 +211,15 @@ public class QdrantVectorStore implements VectorStore {
                 vectorList.add(f);
             }
 
-            Map<String, Object> filterMatch = new LinkedHashMap<>();
-            filterMatch.put("key", "session_id");
-            filterMatch.put("match", Map.of("value", sessionId));
+            List<Map<String, Object>> filterMatches = new ArrayList<>();
+
+            Map<String, Object> sessionFilterMatch = new LinkedHashMap<>();
+            sessionFilterMatch.put("key", "session_id");
+            sessionFilterMatch.put("match", Map.of("value", sessionId));
+            filterMatches.add(sessionFilterMatch);
 
             Map<String, Object> filter = new LinkedHashMap<>();
-            filter.put("must", List.of(filterMatch));
+            filter.put("must", filterMatches);
 
             Map<String, Object> searchRequest = new LinkedHashMap<>();
             searchRequest.put("vector", vectorList);
@@ -243,6 +248,7 @@ public class QdrantVectorStore implements VectorStore {
 
                         ChatMessage message = ChatMessage.builder()
                                 .id(id)
+                                .userId(payload.has("user_id") ? payload.get("user_id").asText() : "")
                                 .sessionId(payload.has("session_id") ? payload.get("session_id").asText() : sessionId)
                                 .role(payload.has("role") ? payload.get("role").asText() : "unknown")
                                 .content(payload.has("content") ? payload.get("content").asText() : "")
@@ -353,5 +359,165 @@ public class QdrantVectorStore implements VectorStore {
     @Override
     public boolean isConnected() {
         return connected.get();
+    }
+
+    public List<ChatMessage> searchByUserId(String userId, float[] queryVector, int topK, float threshold) {
+        if (!connected.get()) {
+            log.warn("Qdrant not connected, retrieving from memory cache");
+            return searchFromCacheByUserId(userId, queryVector, topK, threshold);
+        }
+
+        try {
+            String url = baseUrl + "/collections/" + collectionName + "/points/search";
+
+            List<Float> vectorList = new ArrayList<>();
+            for (float f : queryVector) {
+                vectorList.add(f);
+            }
+
+            Map<String, Object> userIdFilterMatch = new LinkedHashMap<>();
+            userIdFilterMatch.put("key", "user_id");
+            userIdFilterMatch.put("match", Map.of("value", userId));
+
+            Map<String, Object> filter = new LinkedHashMap<>();
+            filter.put("must", List.of(userIdFilterMatch));
+
+            Map<String, Object> searchRequest = new LinkedHashMap<>();
+            searchRequest.put("vector", vectorList);
+            searchRequest.put("limit", topK);
+            searchRequest.put("filter", filter);
+            searchRequest.put("score_threshold", threshold);
+            searchRequest.put("with_payload", true);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(searchRequest)))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                JsonNode root = objectMapper.readTree(response.body());
+                JsonNode result = root.get("result");
+
+                List<ChatMessage> messages = new ArrayList<>();
+                if (result.isArray()) {
+                    for (JsonNode point : result) {
+                        String id = point.has("id") ? point.get("id").asText() : UUID.randomUUID().toString();
+                        JsonNode payload = point.get("payload");
+
+                        ChatMessage message = ChatMessage.builder()
+                                .id(id)
+                                .userId(payload.has("user_id") ? payload.get("user_id").asText() : userId)
+                                .sessionId(payload.has("session_id") ? payload.get("session_id").asText() : "")
+                                .role(payload.has("role") ? payload.get("role").asText() : "unknown")
+                                .content(payload.has("content") ? payload.get("content").asText() : "")
+                                .timestamp(payload.has("timestamp") ? LocalDateTime.parse(payload.get("timestamp").asText()) : LocalDateTime.now())
+                                .tokenCount(payload.has("token_count") ? payload.get("token_count").asInt() : 0)
+                                .build();
+                        messages.add(message);
+                    }
+                }
+                log.debug("Retrieved {} relevant messages by userId {} from Qdrant", messages.size(), userId);
+                return messages;
+            } else {
+                log.error("Vector search by userId failed, status code: {}, response: {}", response.statusCode(), response.body());
+                return searchFromCacheByUserId(userId, queryVector, topK, threshold);
+            }
+        } catch (Exception e) {
+            log.error("Failed to retrieve from Qdrant by userId: {}", e.getMessage());
+            return searchFromCacheByUserId(userId, queryVector, topK, threshold);
+        }
+    }
+
+    private List<ChatMessage> searchFromCacheByUserId(String userId, float[] queryVector, int topK, float threshold) {
+        return memoryCache.values().stream()
+                .flatMap(List::stream)
+                .filter(msg -> userId.equals(msg.getUserId()))
+                .limit(topK)
+                .toList();
+    }
+
+    public void deleteByUserId(String userId) {
+        if (!connected.get()) {
+            log.warn("Qdrant not connected, cleaning memory cache");
+            memoryCache.values().removeIf(messages -> messages.removeIf(msg -> userId.equals(msg.getUserId())));
+            return;
+        }
+
+        try {
+            String url = baseUrl + "/collections/" + collectionName + "/points/delete";
+
+            Map<String, Object> userIdFilterMatch = new LinkedHashMap<>();
+            userIdFilterMatch.put("key", "user_id");
+            userIdFilterMatch.put("match", Map.of("value", userId));
+
+            Map<String, Object> filter = new LinkedHashMap<>();
+            filter.put("must", List.of(userIdFilterMatch));
+
+            Map<String, Object> deleteRequest = new LinkedHashMap<>();
+            deleteRequest.put("filter", filter);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(deleteRequest)))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                log.debug("Successfully deleted all vectors for userId {}", userId);
+            } else {
+                log.error("Failed to delete vectors by userId, status code: {}, response: {}", response.statusCode(), response.body());
+                memoryCache.values().removeIf(messages -> messages.removeIf(msg -> userId.equals(msg.getUserId())));
+            }
+        } catch (Exception e) {
+            log.error("Failed to delete user vectors: {}", e.getMessage());
+            memoryCache.values().removeIf(messages -> messages.removeIf(msg -> userId.equals(msg.getUserId())));
+        }
+    }
+
+    public int countByUserId(String userId) {
+        if (!connected.get()) {
+            return (int) memoryCache.values().stream()
+                    .flatMap(List::stream)
+                    .filter(msg -> userId.equals(msg.getUserId()))
+                    .count();
+        }
+
+        try {
+            String url = baseUrl + "/collections/" + collectionName + "/points/count";
+
+            Map<String, Object> userIdFilterMatch = new LinkedHashMap<>();
+            userIdFilterMatch.put("key", "user_id");
+            userIdFilterMatch.put("match", Map.of("value", userId));
+
+            Map<String, Object> filter = new LinkedHashMap<>();
+            filter.put("must", List.of(userIdFilterMatch));
+
+            Map<String, Object> countRequest = new LinkedHashMap<>();
+            countRequest.put("filter", filter);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(countRequest)))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                JsonNode root = objectMapper.readTree(response.body());
+                return root.has("result") && root.get("result").has("count") ? root.get("result").get("count").asInt() : 0;
+            } else {
+                log.error("Statistics by userId failed, status code: {}, response: {}", response.statusCode(), response.body());
+                return 0;
+            }
+        } catch (Exception e) {
+            log.error("Failed to count user vectors: {}", e.getMessage());
+            return 0;
+        }
     }
 }

@@ -34,13 +34,17 @@ public class ReactAgentController {
 
     @PostMapping("/chat-with-intent")
     public ApiResponse<ChatResponse> chatWithIntent(@RequestBody ChatWithIntentRequest request) {
+        String userId = request.getUserId();
+        if (userId == null || userId.isEmpty()) {
+            userId = "default-user";
+        }
         String sessionId = request.getSessionId();
         if (sessionId == null || sessionId.isEmpty()) {
             sessionId = "default";
         }
-        ChatResponse response = reactAgentService.chatWithIntent(request.getMessage(), sessionId);
-        log.info("Intent chat result: intent={}, confidence={}",
-                response.getIntentType(), response.getIntentConfidence());
+        ChatResponse response = reactAgentService.chatWithIntent(userId, request.getMessage(), sessionId);
+        log.info("Intent chat result: userId={}, intent={}, confidence={}",
+                userId, response.getIntentType(), response.getIntentConfidence());
         return ApiResponse.success(response);
     }
 
@@ -64,14 +68,18 @@ public class ReactAgentController {
 
     @PostMapping("/chat-react-with-intent")
     public ApiResponse<ChatResponse> chatReactWithIntent(@RequestBody ChatWithIntentRequest request) {
+        String userId = request.getUserId();
+        if (userId == null || userId.isEmpty()) {
+            userId = "default-user";
+        }
         String sessionId = request.getSessionId();
         if (sessionId == null || sessionId.isEmpty()) {
             sessionId = "default";
         }
-        log.info("ReAct mode chat with intent request: sessionId={}, message={}", sessionId, request.getMessage());
-        ChatResponse response = reactAgentWithToolsService.chatWithIntent(request.getMessage(), sessionId);
-        log.info("ReAct mode intent chat result: intent={}, confidence={}",
-                response.getIntentType(), response.getIntentConfidence());
+        log.info("ReAct mode chat with intent request: userId={}, sessionId={}, message={}", userId, sessionId, request.getMessage());
+        ChatResponse response = reactAgentWithToolsService.chatWithIntent(userId, request.getMessage(), sessionId);
+        log.info("ReAct mode intent chat result: userId={}, intent={}, confidence={}",
+                userId, response.getIntentType(), response.getIntentConfidence());
         return ApiResponse.success(response);
     }
 
@@ -82,6 +90,7 @@ public class ReactAgentController {
 
     @Data
     public static class ChatWithIntentRequest {
+        private String userId;
         private String message;
         private String sessionId;
     }
