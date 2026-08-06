@@ -107,9 +107,9 @@ kb:
           - 运单
           - 包裹
       response-prefixes:
-        - 知识库ID:
-        - Knowledge Base ID:
-        - Dataset ID:
+        - "知识库ID:"
+        - "Knowledge Base ID:"
+        - "Dataset ID:"
 
 rag:
   max-records: 3
