@@ -35,4 +35,4 @@ bin/
 
 maven-wrapper.jar
 
-src/main/resources/application.properties
+src/main/resources/application.yml

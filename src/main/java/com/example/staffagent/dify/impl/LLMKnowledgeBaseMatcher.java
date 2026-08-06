@@ -1,11 +1,13 @@
 package com.example.staffagent.dify.impl;
 
+import com.example.staffagent.config.KnowledgeBaseProperties;
 import com.example.staffagent.dify.KnowledgeBaseMatcher;
 import com.example.staffagent.dify.dto.KnowledgeBaseInfo;
 import com.example.staffagent.intent.IntentType;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.DashScopeChatModel;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,7 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class LLMKnowledgeBaseMatcher implements KnowledgeBaseMatcher {
 
     @Value("${kb.matcher.llm.enabled:true}")
@@ -34,6 +37,8 @@ public class LLMKnowledgeBaseMatcher implements KnowledgeBaseMatcher {
 
     @Value("${agent.api-key:}")
     private String apiKey;
+
+    private final KnowledgeBaseProperties kbProperties;
 
     private static final String DEFAULT_RESULT = "DEFAULT";
     private static final Pattern UUID_PATTERN = Pattern.compile(
@@ -138,23 +143,19 @@ public class LLMKnowledgeBaseMatcher implements KnowledgeBaseMatcher {
             return DEFAULT_RESULT;
         }
 
-        int start = response.indexOf("Knowledge Base ID:");
-        if (start == -1) {
-            start = response.indexOf("Dataset ID:");
-        }
-        if (start == -1) {
-            start = response.indexOf("Knowledge Base ID:");
-        }
-
-        if (start != -1) {
-            int end = response.indexOf("\n", start);
-            if (end == -1) {
-                end = response.length();
+        List<String> prefixes = kbProperties.getResponsePrefixes();
+        
+        for (String prefix : prefixes) {
+            int start = response.indexOf(prefix);
+            if (start != -1) {
+                int contentStart = start + prefix.length();
+                int end = response.indexOf("\n", contentStart);
+                if (end == -1) {
+                    end = response.length();
+                }
+                String datasetId = response.substring(contentStart, end).trim();
+                return datasetId.isEmpty() ? DEFAULT_RESULT : datasetId;
             }
-            String prefix = start >= response.indexOf("Knowledge Base ID:") ? "Knowledge Base ID:" : 
-                           (start >= response.indexOf("Dataset ID:") ? "Dataset ID:" : "Knowledge Base ID:");
-            String datasetId = response.substring(start + prefix.length(), end).trim();
-            return datasetId.isEmpty() ? DEFAULT_RESULT : datasetId;
         }
 
         Matcher matcher = UUID_PATTERN.matcher(response);

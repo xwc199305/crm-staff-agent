@@ -1,5 +1,6 @@
 package com.example.staffagent.dify.impl;
 
+import com.example.staffagent.config.KnowledgeBaseProperties;
 import com.example.staffagent.dify.DifyClient;
 import com.example.staffagent.dify.DifyKnowledgeBaseService;
 import com.example.staffagent.dify.KnowledgeBaseMatcher;
@@ -23,17 +24,9 @@ public class DifyKnowledgeBaseServiceImpl implements DifyKnowledgeBaseService {
 
     private final DifyClient difyClient;
     private final KnowledgeBaseMatcher llmKnowledgeBaseMatcher;
+    private final KnowledgeBaseProperties kbProperties;
 
     private List<KnowledgeBaseInfo> cachedKnowledgeBaseList = Collections.emptyList();
-
-    private static final Map<IntentType, List<String>> INTENT_KEYWORDS = new HashMap<>();
-
-    static {
-        INTENT_KEYWORDS.put(IntentType.PRODUCT_CONSULTATION, Arrays.asList("product", "usage", "function", "guide", "how to", "use"));
-        INTENT_KEYWORDS.put(IntentType.WARRANTY_POLICY, Arrays.asList("warranty", "guarantee", "quality", "protection"));
-        INTENT_KEYWORDS.put(IntentType.AFTERSALES_PROCESS, Arrays.asList("aftersales", "return", "refund", "exchange", "repair"));
-        INTENT_KEYWORDS.put(IntentType.ORDER_INQUIRY, Arrays.asList("order", "shipping", "logistics", "delivery", "tracking"));
-    }
 
     @PostConstruct
     public void init() {
@@ -142,7 +135,7 @@ public class DifyKnowledgeBaseServiceImpl implements DifyKnowledgeBaseService {
             return null;
         }
 
-        List<String> keywords = INTENT_KEYWORDS.get(intentType);
+        List<String> keywords = kbProperties.getKeywordsForIntent(intentType.name());
         if (keywords == null || keywords.isEmpty()) {
             log.debug("No keywords defined for intent: {}", intentType);
             return null;

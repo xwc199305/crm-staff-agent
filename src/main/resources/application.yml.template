@@ -1,0 +1,161 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: staff-agent
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 10000
+            read-timeout: 10000
+
+agent:
+  name: E-commerce Customer Service Assistant
+  api-key: YOUR_AGENT_API_KEY
+
+intent:
+  confidence-threshold: 0.7
+
+conversation:
+  timeout-minutes: 30
+  cleanup-interval-ms: 300000
+
+dify:
+  enabled: true
+  base-url: https://api.dify.ai/v1
+  api-key: YOUR_DIFY_API_KEY
+  dataset-id: YOUR_DATASET_ID
+  top-k: 3
+  score-threshold: 0.5
+  knowledge-base-refresh-interval-ms: 3600000
+
+kb:
+  matcher:
+    llm:
+      enabled: true
+      timeout-seconds: 15
+      model-name: qwen-max
+      prompt-template: |
+        你是一个知识库分类专家。请根据用户的意图和查询内容，从以下知识库列表中选择最合适的一个进行检索。
+
+        意图类型：{intentType}
+        意图描述：{intentDescription}
+        用户查询：{query}
+
+        知识库列表：
+        {knowledgeBaseList}
+
+        请返回最合适的知识库ID。如果没有合适的知识库，请返回"DEFAULT"。
+
+        返回格式：
+        知识库ID: {datasetId}
+      keywords:
+        PRODUCT_CONSULTATION:
+          - product
+          - usage
+          - function
+          - guide
+          - how to
+          - use
+          - 产品
+          - 使用
+          - 功能
+          - 指南
+          - 操作
+          - 教程
+          - 说明
+        WARRANTY_POLICY:
+          - warranty
+          - guarantee
+          - quality
+          - protection
+          - 保修
+          - 质保
+          - 保障
+          - 三包
+          - 保修期
+          - 售后政策
+        AFTERSALES_PROCESS:
+          - aftersales
+          - return
+          - refund
+          - exchange
+          - repair
+          - 售后
+          - 退货
+          - 退款
+          - 换货
+          - 维修
+          - 返修
+          - 退换
+          - 售后流程
+        ORDER_INQUIRY:
+          - order
+          - shipping
+          - logistics
+          - delivery
+          - tracking
+          - 订单
+          - 物流
+          - 快递
+          - 发货
+          - 配送
+          - 查询
+          - 运单
+          - 包裹
+      response-prefixes:
+        - 知识库ID:
+        - Knowledge Base ID:
+        - Dataset ID:
+
+rag:
+  max-records: 3
+  max-content-length: 2000
+  prompt-template: |
+    你是一个专业的客服助手。请根据以下提供的知识库内容，回答用户的问题。
+
+    知识库内容：
+    {{context}}
+
+    用户问题：{{query}}
+
+    要求：
+    1. 仅基于提供的知识库内容进行回答，不要编造信息
+    2. 如果知识库中没有相关信息，请明确说明"暂无相关信息"
+    3. 回答要清晰、简洁、有条理
+    4. 可以适当使用 Markdown 格式提高可读性
+
+memory:
+  vector-dimensions: 1536
+  max-history-count: 50
+  max-tokens: 8000
+  top-k: 5
+  similarity-threshold: 0.4
+  embedding-model: text-embedding-v1
+  summary-enabled: true
+  async-embedding: true
+
+qdrant:
+  host: localhost
+  port: 6333
+  grpc-port: 6334
+  collection-name: conversation_messages
+  vector-dimensions: 1536
+  distance: cosine
+  index-type: hnsw
+  hnsw-m: 16
+  hnsw-ef-construct: 100
+  timeout-seconds: 30
+  auto-create-collection: true
+
+mem0:
+  enabled: true
+  server-url: http://localhost:8283
+  infer: true
+  top-k: 5
+
+streaming:
+  enabled: true
