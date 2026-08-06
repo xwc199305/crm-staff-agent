@@ -1,30 +1,45 @@
 package com.example.staffagent.controller;
 
+import com.example.staffagent.context.ConversationContextHolder;
+import com.example.staffagent.context.ConversationMemoryManager;
 import com.example.staffagent.dto.ApiResponse;
 import com.example.staffagent.dto.ChatResponse;
 import com.example.staffagent.dto.IntentResult;
+import com.example.staffagent.dify.DifyKnowledgeBaseService;
+import com.example.staffagent.dify.dto.DifyResponse;
+import com.example.staffagent.handler.impl.IntentHandlerFactory;
+import com.example.staffagent.intent.IntentRecognizer;
+import com.example.staffagent.intent.IntentType;
 import com.example.staffagent.service.ReactAgentService;
+import com.example.staffagent.service.StreamingChatService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/agent")
+@RequiredArgsConstructor
 @Slf4j
 public class ReactAgentController {
 
     private final ReactAgentService reactAgentService;
-    private final ReactAgentService reactAgentWithToolsService;
-
-    @Autowired
-    public ReactAgentController(
-            @Qualifier("reactAgentServiceImpl") ReactAgentService reactAgentService,
-            @Qualifier("reactAgentWithToolsService") ReactAgentService reactAgentWithToolsService) {
-        this.reactAgentService = reactAgentService;
-        this.reactAgentWithToolsService = reactAgentWithToolsService;
-    }
+    private final StreamingChatService streamingChatService;
+    private final ConversationMemoryManager memoryManager;
+    private final IntentRecognizer intentRecognizer;
+    private final IntentHandlerFactory handlerFactory;
+    private final DifyKnowledgeBaseService knowledgeBaseService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/chat")
     public ApiResponse<String> chat(@RequestBody ChatRequest request) {
@@ -59,28 +74,90 @@ public class ReactAgentController {
         return ApiResponse.success(reactAgentService.getName());
     }
 
-    @PostMapping("/chat-react")
-    public ApiResponse<String> chatReact(@RequestBody ChatRequest request) {
-        log.info("ReAct mode chat request: {}", request.getMessage());
-        String response = reactAgentWithToolsService.call(request.getMessage());
-        return ApiResponse.success(response);
+    @PostMapping(value = "/chat-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatStream(@RequestBody ChatRequest request) {
+        log.info("Stream chat request: {}", request.getMessage());
+
+        return streamingChatService.streamChat(request.getMessage())
+                .map(chunk -> sseEvent("delta", chunk))
+                .concatWith(Flux.just(sseEvent("done", "{}")))
+                .onErrorResume(e -> {
+                    log.error("Stream chat error", e);
+                    return Flux.just(sseEvent("done", "{\"error\":\"" + e.getMessage() + "\"}"));
+                });
     }
 
-    @PostMapping("/chat-react-with-intent")
-    public ApiResponse<ChatResponse> chatReactWithIntent(@RequestBody ChatWithIntentRequest request) {
-        String userId = request.getUserId();
-        if (userId == null || userId.isEmpty()) {
-            userId = "default-user";
+    @PostMapping(value = "/chat-with-intent-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatWithIntentStream(@RequestBody ChatWithIntentRequest request) {
+        String rawUserId = request.getUserId();
+        String userId = (rawUserId == null || rawUserId.isEmpty()) ? "default-user" : rawUserId;
+        String rawSessionId = request.getSessionId();
+        String sessionId = (rawSessionId == null || rawSessionId.isEmpty()) ? "default" : rawSessionId;
+        String userInput = request.getMessage();
+
+        log.info("Stream chat with intent: userId={}, sessionId={}, message={}", userId, sessionId, userInput);
+
+        // Build context and set ThreadLocal (sync)
+        String context = memoryManager.buildContext(userId, sessionId, userInput);
+        ConversationContextHolder.setContext(context);
+
+        // Recognize intent (sync)
+        IntentResult intentResult = intentRecognizer.recognize(userInput);
+        IntentType intentType = intentResult.getIntentType();
+
+        // Build metadata event
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("intentType", intentType.name());
+        metadata.put("intentDescription", intentType.getDescription());
+        metadata.put("confidence", intentResult.getConfidence());
+        ServerSentEvent<String> metadataEvent = sseEvent("metadata", toJson(metadata));
+
+        // Determine streaming source — streamChat() reads ThreadLocal synchronously
+        Flux<String> deltaFlux;
+        if (intentType == IntentType.UNKNOWN || !handlerFactory.hasHandler(intentType)) {
+            deltaFlux = streamingChatService.streamChat(userInput);
+        } else {
+            List<DifyResponse.Record> records = knowledgeBaseService.retrieveRecordsByIntent(userInput, intentType);
+            deltaFlux = streamingChatService.streamChat(userInput, records);
         }
-        String sessionId = request.getSessionId();
-        if (sessionId == null || sessionId.isEmpty()) {
-            sessionId = "default";
+
+        // Accumulate reply for memory
+        StringBuilder replyBuilder = new StringBuilder();
+
+        return Flux.just(metadataEvent)
+                .concatWith(deltaFlux
+                        .doOnNext(replyBuilder::append)
+                        .map(chunk -> sseEvent("delta", chunk)))
+                .concatWith(Flux.defer(() -> {
+                    String reply = replyBuilder.toString();
+                    if (!reply.isEmpty()) {
+                        memoryManager.addMessagePair(userId, sessionId, userInput, reply);
+                    }
+                    Map<String, Object> doneData = new HashMap<>();
+                    doneData.put("reply", reply);
+                    return Flux.just(sseEvent("done", toJson(doneData)));
+                }))
+                .doFinally(signal -> ConversationContextHolder.clearContext())
+                .onErrorResume(e -> {
+                    log.error("Stream chat with intent error", e);
+                    return Flux.just(sseEvent("done", "{\"error\":\"" + e.getMessage() + "\"}"));
+                });
+    }
+
+    private ServerSentEvent<String> sseEvent(String event, String data) {
+        return ServerSentEvent.<String>builder()
+                .event(event)
+                .data(data)
+                .build();
+    }
+
+    private String toJson(Map<String, Object> map) {
+        try {
+            return objectMapper.writeValueAsString(map);
+        } catch (Exception e) {
+            log.warn("Failed to serialize JSON: {}", e.getMessage());
+            return "{}";
         }
-        log.info("ReAct mode chat with intent request: userId={}, sessionId={}, message={}", userId, sessionId, request.getMessage());
-        ChatResponse response = reactAgentWithToolsService.chatWithIntent(userId, request.getMessage(), sessionId);
-        log.info("ReAct mode intent chat result: userId={}, intent={}, confidence={}",
-                userId, response.getIntentType(), response.getIntentConfidence());
-        return ApiResponse.success(response);
     }
 
     @Data
