@@ -1,5 +1,6 @@
 package com.example.staffagent.service.impl;
 
+import com.example.staffagent.agent.StaffAgentTools;
 import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.context.ConversationMemoryManager;
 import com.example.staffagent.dto.ChatResponse;
@@ -11,6 +12,7 @@ import com.example.staffagent.service.ReactAgentService;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.tool.Toolkit;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,11 +27,23 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     private static final String DEFAULT_REPLY = "Sorry, we cannot understand your question. Please rephrase.";
 
+    private static final String SYSTEM_PROMPT = """
+            You are an e-commerce customer service assistant, responsible for answering user questions about product usage, order inquiries, logistics tracking, etc.
+
+            You have access to the following tools, decide whether to call them based on the user's question:
+            - query_knowledge_base(query): Query knowledge base for product usage info, warranty policy, aftersales process, etc.
+            - query_order(query): Query order status, order details and other order-related info.
+            - query_logistics(query): Query logistics status, shipping tracking and other logistics info.
+
+            If the user's question can be answered directly (e.g. greetings, general chitchat), respond directly without calling tools.
+            """;
+
 	private ReActAgent agent;
 
     private final IntentRecognizer intentRecognizer;
     private final IntentHandlerFactory handlerFactory;
     private final ConversationMemoryManager memoryManager;
+    private final StaffAgentTools staffAgentTools;
 
     @Value("${agent.name:React Assistant}")
     private String name;
@@ -58,10 +72,15 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                     .modelName("qwen-max")
                     .build();
 
+            Toolkit toolkit = new Toolkit();
+            toolkit.registerTool(staffAgentTools);
+
             agent = ReActAgent.builder()
                     .name(name)
-                    .sysPrompt("You are a helpful AI assistant.")
+                    .sysPrompt(SYSTEM_PROMPT)
                     .model(model)
+                    .toolkit(toolkit)
+                    .maxIters(3)
                     .build();
         }
         return agent;
