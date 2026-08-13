@@ -159,3 +159,11 @@ mem0:
 
 streaming:
   enabled: true
+
+mcp:
+  enabled: true
+  server-url: http://localhost:8080
+  timeout-seconds: 10
+  tools:
+    order: query_order
+    logistics: query_logistics

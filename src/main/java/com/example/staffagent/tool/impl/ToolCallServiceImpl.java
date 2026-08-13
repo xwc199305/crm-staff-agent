@@ -1,9 +1,11 @@
 package com.example.staffagent.tool.impl;
 
+import com.example.staffagent.config.McpProperties;
 import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.dify.DifyKnowledgeBaseService;
 import com.example.staffagent.intent.IntentRecognizer;
 import com.example.staffagent.intent.IntentType;
+import com.example.staffagent.mcp.McpClient;
 import com.example.staffagent.service.RagService;
 import com.example.staffagent.tool.ToolCallService;
 import io.agentscope.core.ReActAgent;
@@ -15,6 +17,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -23,6 +27,8 @@ public class ToolCallServiceImpl implements ToolCallService {
     private final DifyKnowledgeBaseService difyKnowledgeBaseService;
     private final RagService ragService;
     private final IntentRecognizer intentRecognizer;
+    private final McpClient mcpClient;
+    private final McpProperties mcpProperties;
 
     @Value("${agent.api-key:}")
     private String apiKey;
@@ -107,14 +113,14 @@ public class ToolCallServiceImpl implements ToolCallService {
 
     @Override
     public String callMcpOrder(String query) {
-        log.info("MCP order inquiry not yet implemented, query: {}", query);
-        return "Order inquiry feature is under development, please try again later";
+        log.info("Calling MCP order tool, query: {}", query);
+        return mcpClient.callTool(mcpProperties.getTools().getOrder(), Map.of("query", query));
     }
 
     @Override
     public String callMcpLogistics(String query) {
-        log.info("MCP logistics inquiry not yet implemented, query: {}", query);
-        return "Logistics inquiry feature is under development, please try again later";
+        log.info("Calling MCP logistics tool, query: {}", query);
+        return mcpClient.callTool(mcpProperties.getTools().getLogistics(), Map.of("query", query));
     }
 
     @Override
