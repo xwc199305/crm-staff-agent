@@ -2,7 +2,6 @@ package com.example.staffagent.tool;
 
 public enum ToolType {
     KNOWLEDGE_BASE,
-    MCP_ORDER,
-    MCP_LOGISTICS,
+    MCP_WEATHER,
     DIRECT_RESPONSE
 }

@@ -47,8 +47,7 @@ public class IntentHandlerFactory {
 
         return switch (toolType) {
             case KNOWLEDGE_BASE -> toolCallService.callKnowledgeBase(query, intentType);
-            case MCP_ORDER -> toolCallService.callMcpOrder(query);
-            case MCP_LOGISTICS -> toolCallService.callMcpLogistics(query);
+            case MCP_WEATHER -> toolCallService.callWeather(query);
             case DIRECT_RESPONSE -> handleDirectResponse(query, intentType);
         };
     }

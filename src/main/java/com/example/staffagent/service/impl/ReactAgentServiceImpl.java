@@ -27,17 +27,6 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     private static final String DEFAULT_REPLY = "Sorry, we cannot understand your question. Please rephrase.";
 
-    private static final String SYSTEM_PROMPT = """
-            You are an e-commerce customer service assistant, responsible for answering user questions about product usage, order inquiries, logistics tracking, etc.
-
-            You have access to the following tools, decide whether to call them based on the user's question:
-            - query_knowledge_base(query): Query knowledge base for product usage info, warranty policy, aftersales process, etc.
-            - query_order(query): Query order status, order details and other order-related info.
-            - query_logistics(query): Query logistics status, shipping tracking and other logistics info.
-
-            If the user's question can be answered directly (e.g. greetings, general chitchat), respond directly without calling tools.
-            """;
-
 	private ReActAgent agent;
 
     private final IntentRecognizer intentRecognizer;
@@ -50,6 +39,9 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     @Value("${agent.api-key:}")
     private String apiKey;
+
+    @Value("${agent.system-prompt:You are a helpful assistant.}")
+    private String systemPrompt;
 
     @PostConstruct
     public void init() {
@@ -77,7 +69,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
             agent = ReActAgent.builder()
                     .name(name)
-                    .sysPrompt(SYSTEM_PROMPT)
+                    .sysPrompt(systemPrompt)
                     .model(model)
                     .toolkit(toolkit)
                     .maxIters(3)

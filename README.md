@@ -24,12 +24,15 @@ ReAct (Reasoning + Acting) is a classic Agent pattern that solves problems throu
 - ✅ Conversation memory with vector database (Qdrant)
 - ✅ RAG (Retrieval-Augmented Generation) support
 - ✅ Knowledge base integration with Dify
+- ✅ mem0 memory server integration (user-scoped conversation history)
+- ✅ MCP (Model Context Protocol) tool integration
 
 ## Prerequisites
 
 - **JDK 17** or higher
 - **Maven 3.6+**
 - **DashScope API Key** (Get from [Alibaba Cloud DashScope Console](https://dashscope.console.aliyun.com/apiKey))
+- **Python 3.9+** (for running the local mem0 memory server)
 - **Optional**: Qdrant vector database for conversation memory
 
 ## Quick Start
@@ -80,6 +83,73 @@ curl -X POST http://localhost:8080/api/agent/chat \
 
 ```bash
 curl http://localhost:8080/api/agent/name
+```
+
+## mem0 Memory Server
+
+The agent persists user-scoped conversation history through a local **mem0** memory server (FastAPI app defined in [`mem0_server.py`](./mem0_server.py)). It must be started **before** the Spring Boot application so that `ConversationMemoryManager` can read/write memories.
+
+The server listens on `http://localhost:8283` and stores vectors in a local Chroma instance (`/tmp/chroma`, `/tmp/mem0/history.db`).
+
+### 1. Install Python Dependencies
+
+```bash
+pip3 install fastapi uvicorn mem0ai
+```
+
+> For the local fallback mode (no DashScope key), also install `fastembed` and run [Ollama](https://ollama.com/) with the `llama3.1` model: `ollama pull llama3.1`
+
+### 2. Configure API Key (Optional)
+
+When `DASHSCOPE_API_KEY` is set, the server uses DashScope (`qwen-max` + `text-embedding-v1`, 1536 dims) for both LLM and embedding. Otherwise it falls back to local `fastembed` + `ollama` (384 dims).
+
+```bash
+export DASHSCOPE_API_KEY=your-api-key-here
+```
+
+### 3. Start the Server
+
+The server stores vectors under `/tmp/chroma` and history in `/tmp/mem0/history.db`. Create these directories first (only needed once):
+
+```bash
+mkdir -p /tmp/mem0 /tmp/chroma
+```
+
+Foreground:
+
+```bash
+python3 mem0_server.py
+```
+
+Background (recommended for development):
+
+```bash
+mkdir -p /tmp/mem0 /tmp/chroma
+nohup python3 mem0_server.py > /tmp/mem0-server.log 2>&1 &
+echo "mem0 server pid=$!"
+```
+
+### 4. Verify
+
+```bash
+curl http://localhost:8283/api/health
+# Expected: {"status":"healthy","service":"mem0-server"}
+```
+
+### 5. Stop the Server
+
+```bash
+lsof -ti:8283 | xargs kill
+```
+
+### mem0 Configuration (application.yml)
+
+```yaml
+mem0:
+  enabled: true
+  server-url: http://localhost:8283
+  infer: true
+  top-k: 5
 ```
 
 ## Project Structure

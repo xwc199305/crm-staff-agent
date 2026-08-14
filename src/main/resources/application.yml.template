@@ -162,8 +162,5 @@ streaming:
 
 mcp:
   enabled: true
-  server-url: http://localhost:8080
+  server-url: http://localhost:32790
   timeout-seconds: 10
-  tools:
-    order: query_order
-    logistics: query_logistics

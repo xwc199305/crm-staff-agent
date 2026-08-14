@@ -1,6 +1,5 @@
 package com.example.staffagent.tool.impl;
 
-import com.example.staffagent.config.McpProperties;
 import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.dify.DifyKnowledgeBaseService;
 import com.example.staffagent.intent.IntentRecognizer;
@@ -28,7 +27,6 @@ public class ToolCallServiceImpl implements ToolCallService {
     private final RagService ragService;
     private final IntentRecognizer intentRecognizer;
     private final McpClient mcpClient;
-    private final McpProperties mcpProperties;
 
     @Value("${agent.api-key:}")
     private String apiKey;
@@ -112,15 +110,9 @@ public class ToolCallServiceImpl implements ToolCallService {
     }
 
     @Override
-    public String callMcpOrder(String query) {
-        log.info("Calling MCP order tool, query: {}", query);
-        return mcpClient.callTool(mcpProperties.getTools().getOrder(), Map.of("query", query));
-    }
-
-    @Override
-    public String callMcpLogistics(String query) {
-        log.info("Calling MCP logistics tool, query: {}", query);
-        return mcpClient.callTool(mcpProperties.getTools().getLogistics(), Map.of("query", query));
+    public String callWeather(String query) {
+        log.info("Calling MCP getWeather tool, query: {}", query);
+        return mcpClient.callTool("getWeather", Map.of("city", query));
     }
 
     @Override

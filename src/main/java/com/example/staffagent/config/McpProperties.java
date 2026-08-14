@@ -8,13 +8,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class McpProperties {
 
     private boolean enabled = true;
-    private String serverUrl = "http://localhost:8080";
+    private String serverUrl = "http://localhost:32790";
     private int timeoutSeconds = 10;
-    private Tools tools = new Tools();
-
-    @Data
-    public static class Tools {
-        private String order = "query_order";
-        private String logistics = "query_logistics";
-    }
 }
