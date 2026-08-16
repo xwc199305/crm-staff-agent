@@ -2,22 +2,17 @@ package com.example.staffagent.intent.impl;
 
 import com.example.staffagent.dto.IntentResult;
 import com.example.staffagent.intent.IntentType;
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.model.DashScopeChatModel;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class LLMIntentRecognizer {
 
-    private ReActAgent agent;
-
-    @Value("${agent.api-key:}")
-    private String apiKey;
+    private final ChatClient.Builder chatClientBuilder;
 
     private static final String INTENT_PROMPT = """
             You are an e-commerce customer service intent recognition expert. Analyze user input and classify it into one of the following intents:
@@ -38,54 +33,20 @@ public class LLMIntentRecognizer {
             %s
             """;
 
-    private ReActAgent getAgent() {
-        if (agent == null) {
-            String actualApiKey = apiKey;
-            if (actualApiKey == null || actualApiKey.isEmpty()) {
-                actualApiKey = System.getenv("DASHSCOPE_API_KEY");
-            }
-
-            if (actualApiKey == null || actualApiKey.isEmpty()) {
-                log.warn("API key not configured, LLM intent recognition will not work");
-                return null;
-            }
-
-            DashScopeChatModel model = DashScopeChatModel.builder()
-                    .apiKey(actualApiKey)
-                    .modelName("qwen-max")
-                    .build();
-
-            agent = ReActAgent.builder()
-                    .name("IntentRecognizer")
-                    .sysPrompt("You are a professional intent recognition assistant. Output results strictly in the required format.")
-                    .model(model)
-                    .build();
-        }
-        return agent;
-    }
-
     public IntentResult recognize(String query) {
-        ReActAgent intentAgent = getAgent();
-        if (intentAgent == null) {
-            log.warn("LLM intent recognition skipped due to missing API key");
-            return null;
-        }
-
         try {
             String prompt = String.format(INTENT_PROMPT, query);
-            Msg msg = Msg.builder()
-                    .textContent(prompt)
-                    .build();
-
-            Mono<Msg> responseMono = intentAgent.call(msg);
-            Msg response = responseMono.block();
-
-            if (response == null || response.getTextContent() == null) {
+            String response = chatClientBuilder.build().prompt()
+                    .system("You are a professional intent recognition assistant. Output results strictly in the required format.")
+                    .user(prompt)
+                    .call()
+                    .content();
+            if (response == null) {
                 log.warn("LLM intent recognition returned null");
                 return null;
             }
-            log.info("LLM intent recognition response: {}", response.getTextContent());
-            return parseIntentResponse(response.getTextContent(), query);
+            log.info("LLM intent recognition response: {}", response);
+            return parseIntentResponse(response, query);
         } catch (Exception e) {
             log.error("LLM intent recognition failed", e);
             return null;

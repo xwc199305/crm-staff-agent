@@ -18,11 +18,11 @@ public class OrderInquiryHandler implements IntentHandler {
     @Override
     public String handle(String query) {
         log.debug("Handling order inquiry query: {}", query);
-        return "Order inquiry is not available via MCP tools, please use the calculate or weather tools instead.";
+        return "Order inquiry is handled through the MCP query tool.";
     }
 
     @Override
     public ToolType getToolType() {
-        return ToolType.MCP_WEATHER;
+        return ToolType.MCP_ORDER;
     }
 }

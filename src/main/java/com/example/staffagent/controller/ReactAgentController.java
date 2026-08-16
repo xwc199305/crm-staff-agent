@@ -1,15 +1,9 @@
 package com.example.staffagent.controller;
 
-import com.example.staffagent.context.ConversationContextHolder;
-import com.example.staffagent.context.ConversationMemoryManager;
 import com.example.staffagent.dto.ApiResponse;
 import com.example.staffagent.dto.ChatResponse;
 import com.example.staffagent.dto.IntentResult;
-import com.example.staffagent.dify.DifyKnowledgeBaseService;
-import com.example.staffagent.dify.dto.DifyResponse;
-import com.example.staffagent.handler.impl.IntentHandlerFactory;
-import com.example.staffagent.intent.IntentRecognizer;
-import com.example.staffagent.intent.IntentType;
+import com.example.staffagent.mcp.SalesforceMcpRequestContext;
 import com.example.staffagent.service.ReactAgentService;
 import com.example.staffagent.service.StreamingChatService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,7 +18,6 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -35,20 +28,27 @@ public class ReactAgentController {
 
     private final ReactAgentService reactAgentService;
     private final StreamingChatService streamingChatService;
-    private final ConversationMemoryManager memoryManager;
-    private final IntentRecognizer intentRecognizer;
-    private final IntentHandlerFactory handlerFactory;
-    private final DifyKnowledgeBaseService knowledgeBaseService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/chat")
-    public ApiResponse<String> chat(@RequestBody ChatRequest request) {
-        String response = reactAgentService.call(request.getMessage());
-        return ApiResponse.success(response);
+    public ApiResponse<String> chat(
+            @RequestHeader(value = "X-CRM-ORG-DOMAIN", required = false) String orgDomain,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody ChatRequest request) {
+        SalesforceMcpRequestContext.set(orgDomain, authorization);
+        try {
+            String response = reactAgentService.call(request.getMessage());
+            return ApiResponse.success(response);
+        } finally {
+            SalesforceMcpRequestContext.clear();
+        }
     }
 
     @PostMapping("/chat-with-intent")
-    public ApiResponse<ChatResponse> chatWithIntent(@RequestBody ChatWithIntentRequest request) {
+    public ApiResponse<ChatResponse> chatWithIntent(
+            @RequestHeader(value = "X-CRM-ORG-DOMAIN", required = false) String orgDomain,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody ChatWithIntentRequest request) {
         String userId = request.getUserId();
         if (userId == null || userId.isEmpty()) {
             userId = "default-user";
@@ -57,10 +57,15 @@ public class ReactAgentController {
         if (sessionId == null || sessionId.isEmpty()) {
             sessionId = "default";
         }
-        ChatResponse response = reactAgentService.chatWithIntent(userId, request.getMessage(), sessionId);
-        log.info("Intent chat result: userId={}, intent={}, confidence={}",
-                userId, response.getIntentType(), response.getIntentConfidence());
-        return ApiResponse.success(response);
+        SalesforceMcpRequestContext.set(orgDomain, authorization);
+        try {
+            ChatResponse response = reactAgentService.chatWithIntent(userId, request.getMessage(), sessionId);
+            log.info("Intent chat result: userId={}, intent={}, confidence={}",
+                    userId, response.getIntentType(), response.getIntentConfidence());
+            return ApiResponse.success(response);
+        } finally {
+            SalesforceMcpRequestContext.clear();
+        }
     }
 
     @PostMapping("/recognize-intent")
@@ -88,7 +93,10 @@ public class ReactAgentController {
     }
 
     @PostMapping(value = "/chat-with-intent-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<String>> chatWithIntentStream(@RequestBody ChatWithIntentRequest request) {
+    public Flux<ServerSentEvent<String>> chatWithIntentStream(
+            @RequestHeader(value = "X-CRM-ORG-DOMAIN", required = false) String orgDomain,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody ChatWithIntentRequest request) {
         String rawUserId = request.getUserId();
         String userId = (rawUserId == null || rawUserId.isEmpty()) ? "default-user" : rawUserId;
         String rawSessionId = request.getSessionId();
@@ -97,51 +105,27 @@ public class ReactAgentController {
 
         log.info("Stream chat with intent: userId={}, sessionId={}, message={}", userId, sessionId, userInput);
 
-        // Build context and set ThreadLocal (sync)
-        String context = memoryManager.buildContext(userId, sessionId, userInput);
-        ConversationContextHolder.setContext(context);
-
-        // Recognize intent (sync)
-        IntentResult intentResult = intentRecognizer.recognize(userInput);
-        IntentType intentType = intentResult.getIntentType();
-
-        // Build metadata event
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("intentType", intentType.name());
-        metadata.put("intentDescription", intentType.getDescription());
-        metadata.put("confidence", intentResult.getConfidence());
-        ServerSentEvent<String> metadataEvent = sseEvent("metadata", toJson(metadata));
-
-        // Determine streaming source — streamChat() reads ThreadLocal synchronously
-        Flux<String> deltaFlux;
-        if (intentType == IntentType.UNKNOWN || !handlerFactory.hasHandler(intentType)) {
-            deltaFlux = streamingChatService.streamChat(userInput);
-        } else {
-            List<DifyResponse.Record> records = knowledgeBaseService.retrieveRecordsByIntent(userInput, intentType);
-            deltaFlux = streamingChatService.streamChat(userInput, records);
+        SalesforceMcpRequestContext.set(orgDomain, authorization);
+        try {
+            // The same Graph execution backs both intent endpoints so tool routing (including
+            // Salesforce MCP) cannot be bypassed by the SSE endpoint.
+            ChatResponse response = reactAgentService.chatWithIntent(userId, userInput, sessionId);
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("intentType", response.getIntentType().name());
+            metadata.put("intentDescription", response.getIntentDescription());
+            metadata.put("confidence", response.getIntentConfidence());
+            Map<String, Object> doneData = new HashMap<>();
+            doneData.put("reply", response.getReply());
+            return Flux.just(
+                    sseEvent("metadata", toJson(metadata)),
+                    sseEvent("delta", response.getReply()),
+                    sseEvent("done", toJson(doneData)));
+        } catch (Exception e) {
+            log.error("Stream chat with intent error", e);
+            return Flux.just(sseEvent("done", "{\"error\":\"" + e.getMessage() + "\"}"));
+        } finally {
+            SalesforceMcpRequestContext.clear();
         }
-
-        // Accumulate reply for memory
-        StringBuilder replyBuilder = new StringBuilder();
-
-        return Flux.just(metadataEvent)
-                .concatWith(deltaFlux
-                        .doOnNext(replyBuilder::append)
-                        .map(chunk -> sseEvent("delta", chunk)))
-                .concatWith(Flux.defer(() -> {
-                    String reply = replyBuilder.toString();
-                    if (!reply.isEmpty()) {
-                        memoryManager.addMessagePair(userId, sessionId, userInput, reply);
-                    }
-                    Map<String, Object> doneData = new HashMap<>();
-                    doneData.put("reply", reply);
-                    return Flux.just(sseEvent("done", toJson(doneData)));
-                }))
-                .doFinally(signal -> ConversationContextHolder.clearContext())
-                .onErrorResume(e -> {
-                    log.error("Stream chat with intent error", e);
-                    return Flux.just(sseEvent("done", "{\"error\":\"" + e.getMessage() + "\"}"));
-                });
     }
 
     private ServerSentEvent<String> sseEvent(String event, String data) {

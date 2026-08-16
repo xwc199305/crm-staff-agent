@@ -1,110 +1,58 @@
 package com.example.staffagent.tool.impl;
 
-import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.dify.DifyKnowledgeBaseService;
 import com.example.staffagent.intent.IntentRecognizer;
 import com.example.staffagent.intent.IntentType;
 import com.example.staffagent.mcp.McpClient;
 import com.example.staffagent.service.RagService;
 import com.example.staffagent.tool.ToolCallService;
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.model.DashScopeChatModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ToolCallServiceImpl implements ToolCallService {
 
+    private static final Pattern ORDER_NUMBER_PATTERN = Pattern.compile(
+            "(?:订单号|订单|order(?:\\s*(?:number|id))?)\\s*[:：#]?(\\d[\\dA-Za-z_-]*)",
+            Pattern.CASE_INSENSITIVE);
+
     private final DifyKnowledgeBaseService difyKnowledgeBaseService;
     private final RagService ragService;
     private final IntentRecognizer intentRecognizer;
     private final McpClient mcpClient;
 
-    @Value("${agent.api-key:}")
-    private String apiKey;
+    private final ChatClient.Builder chatClientBuilder;
 
     @Override
     public String callKnowledgeBase(String query, IntentType intentType) {
+        return callKnowledgeBase(query, intentType, "");
+    }
+
+    @Override
+    public String callKnowledgeBase(String query, IntentType intentType, String conversationContext) {
         log.info("Calling knowledge base for intent {}, query: {}", intentType, query);
-        
-        String context = ConversationContextHolder.getContext();
-        log.debug("Context retrieved from ThreadLocal, length={}", context != null ? context.length() : 0);
         
         try {
             var records = difyKnowledgeBaseService.retrieveRecordsByIntent(query, intentType);
             if (records.isEmpty()) {
                 log.debug("No records found in knowledge base for intent {}", intentType);
-                if (context != null && !context.isEmpty()) {
-                    log.info("Using mem0 context to generate fallback response");
-                    return generateResponseFromContext(query, context);
-                }
                 return "No relevant information available";
             }
 
-            return ragService.generate(query, records);
+            String queryWithHistory = conversationContext == null || conversationContext.isBlank()
+                    ? query
+                    : "会话上下文（仅用于理解指代）：\n" + conversationContext + "\n\n当前问题：" + query;
+            return ragService.generate(queryWithHistory, records);
         } catch (Exception e) {
             log.warn("Knowledge base call failed: {}", e.getMessage());
-            if (context != null && !context.isEmpty()) {
-                log.info("Using mem0 context to generate fallback response after knowledge base failure");
-                return generateResponseFromContext(query, context);
-            }
-            return "No relevant information available";
-        }
-    }
-
-    private String generateResponseFromContext(String query, String context) {
-        log.info("Generating response from mem0 context, context length={}", context.length());
-        
-        String actualApiKey = apiKey;
-        if (actualApiKey == null || actualApiKey.isEmpty()) {
-            actualApiKey = System.getenv("DASHSCOPE_API_KEY");
-        }
-
-        if (actualApiKey == null || actualApiKey.isEmpty()) {
-            log.warn("API key not configured for context-based response generation");
-            return "No relevant information available";
-        }
-
-        try {
-            String prompt = "你是一个专业的客服助手。请根据以下历史对话信息，回答用户当前的问题。\n\n" +
-                    "历史对话信息：\n" + context + "\n\n" +
-                    "用户当前问题：" + query + "\n\n" +
-                    "要求：\n" +
-                    "1. 基于历史对话信息回答用户问题\n" +
-                    "2. 如果历史信息中没有相关内容，请说明\n" +
-                    "3. 回答要清晰、简洁";
-
-            DashScopeChatModel model = DashScopeChatModel.builder()
-                    .apiKey(actualApiKey)
-                    .modelName("qwen-max")
-                    .build();
-
-            ReActAgent agent = ReActAgent.builder()
-                    .name("Context-Assistant")
-                    .sysPrompt("You are a helpful customer service assistant.")
-                    .model(model)
-                    .build();
-
-            Msg msg = Msg.builder()
-                    .textContent(prompt)
-                    .build();
-
-            Mono<Msg> responseMono = agent.call(msg);
-            Msg response = responseMono.block();
-
-            String result = response != null ? response.getTextContent() : "No relevant information available";
-            log.info("Context-based response generated: {}", result.length() > 100 ? result.substring(0, 100) + "..." : result);
-            return result;
-        } catch (Exception e) {
-            log.error("Context-based response generation failed", e);
             return "No relevant information available";
         }
     }
@@ -113,6 +61,52 @@ public class ToolCallServiceImpl implements ToolCallService {
     public String callWeather(String query) {
         log.info("Calling MCP getWeather tool, query: {}", query);
         return mcpClient.callTool("getWeather", Map.of("city", query));
+    }
+
+    @Override
+    public String callOrder(String query) {
+        return callOrder(query, "");
+    }
+
+    @Override
+    public String callOrder(String query, String conversationContext) {
+        String orderNumber = extractOrderNumber(query);
+        if (orderNumber == null) {
+            return "无法识别订单号，请提供订单号后再查询。";
+        }
+
+        String soql = "SELECT Id, OrderNumber, Account.Name "
+                + "FROM Order WHERE OrderNumber = '" + orderNumber + "' LIMIT 1";
+        log.info("Calling Salesforce MCP querySoql tool for orderNumber={}", orderNumber);
+        String rawResult = mcpClient.callTool("querySoql", Map.of("soql", soql));
+        return formatMcpResult(query, conversationContext, rawResult);
+    }
+
+    private String extractOrderNumber(String query) {
+        if (query == null) {
+            return null;
+        }
+        Matcher matcher = ORDER_NUMBER_PATTERN.matcher(query);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private String formatMcpResult(String userQuery, String conversationContext, String rawResult) {
+        if (rawResult == null || rawResult.isBlank() || rawResult.startsWith("MCP service")) {
+            return rawResult == null ? "订单查询未返回结果。" : rawResult;
+        }
+        try {
+            String response = chatClientBuilder.build().prompt()
+                    .system("你是电商客服。会话上下文仅用于理解指代；订单事实只能依据 Salesforce MCP 查询结果，"
+                            + "不得编造。用中文清晰说明订单号、状态、日期、金额、客户信息。没有记录时明确说明未找到订单。")
+                    .user("会话上下文：\n" + conversationContext + "\n\n用户问题：" + userQuery
+                            + "\n\nSalesforce MCP 原始结果：\n" + rawResult)
+                    .call()
+                    .content();
+            return response == null || response.isBlank() ? rawResult : response;
+        } catch (Exception e) {
+            log.warn("Failed to format Salesforce MCP result, returning raw response: {}", e.getMessage());
+            return rawResult;
+        }
     }
 
     @Override

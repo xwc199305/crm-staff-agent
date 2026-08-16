@@ -1,20 +1,16 @@
 package com.example.staffagent.service.impl;
 
-import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.dify.DifyKnowledgeBaseService;
 import com.example.staffagent.dify.dto.DifyResponse;
 import com.example.staffagent.service.RagService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.model.DashScopeChatModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,11 +34,9 @@ public class RagServiceImpl implements RagService {
     @Value("${rag.max-content-length:2000}")
     private Integer maxContentLength;
 
-    @Value("${agent.api-key:}")
-    private String apiKey;
-
     private final ObjectMapper objectMapper = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
+    private final ChatClient.Builder chatClientBuilder;
 
     @Override
     public String generate(String query, List<DifyResponse.Record> records) {
@@ -62,12 +56,6 @@ public class RagServiceImpl implements RagService {
                     .collect(Collectors.toList());
 
             String context = recordsToJson(limitedRecords);
-            
-            String historyContext = ConversationContextHolder.getContext();
-            if (historyContext != null && !historyContext.isEmpty()) {
-                context = historyContext + "\n\n[Knowledge Base Context]:\n" + context;
-                log.debug("Added history context to RAG generation, history length={}", historyContext.length());
-            }
             
             String prompt = buildPrompt(query, context);
 
@@ -129,36 +117,15 @@ public class RagServiceImpl implements RagService {
     }
 
     private String callLlm(String prompt) {
-        String actualApiKey = apiKey;
-        if (actualApiKey == null || actualApiKey.isEmpty()) {
-            actualApiKey = System.getenv("DASHSCOPE_API_KEY");
-        }
-
-        if (actualApiKey == null || actualApiKey.isEmpty()) {
-            log.warn("API key not configured for RAG generation");
-            return "";
-        }
-
         try {
-            DashScopeChatModel model = DashScopeChatModel.builder()
-                    .apiKey(actualApiKey)
-                    .modelName("qwen-max")
-                    .build();
-
-            ReActAgent agent = ReActAgent.builder()
-                    .name("RAG-Assistant")
-                    .sysPrompt("You are a professional knowledge QA assistant. Answer user questions based on the provided context.")
-                    .model(model)
-                    .build();
-
-            Msg msg = Msg.builder()
-                    .textContent(prompt)
-                    .build();
-
-            Mono<Msg> responseMono = agent.call(msg);
-            Msg response = responseMono.block();
-
-            String result = response != null ? response.getTextContent() : "";
+            String result = chatClientBuilder.build().prompt()
+                    .system("You are a professional knowledge QA assistant. Answer user questions based on the provided context.")
+                    .user(prompt)
+                    .call()
+                    .content();
+            if (result == null) {
+                return "";
+            }
             log.info("RAG LLM response: {}", result.length() > 100 ? result.substring(0, 100) + "..." : result);
             return result;
         } catch (Exception e) {

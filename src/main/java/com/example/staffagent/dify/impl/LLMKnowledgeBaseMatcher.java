@@ -4,16 +4,11 @@ import com.example.staffagent.config.KnowledgeBaseProperties;
 import com.example.staffagent.dify.KnowledgeBaseMatcher;
 import com.example.staffagent.dify.dto.KnowledgeBaseInfo;
 import com.example.staffagent.intent.IntentType;
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.model.DashScopeChatModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
-
-import java.time.Duration;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,16 +24,8 @@ public class LLMKnowledgeBaseMatcher implements KnowledgeBaseMatcher {
     @Value("${kb.matcher.llm.prompt-template:}")
     private String promptTemplate;
 
-    @Value("${kb.matcher.llm.timeout-seconds:5}")
-    private int timeoutSeconds;
-
-    @Value("${kb.matcher.llm.model-name:qwen-max}")
-    private String modelName;
-
-    @Value("${agent.api-key:}")
-    private String apiKey;
-
     private final KnowledgeBaseProperties kbProperties;
+    private final ChatClient.Builder chatClientBuilder;
 
     private static final String DEFAULT_RESULT = "DEFAULT";
     private static final Pattern UUID_PATTERN = Pattern.compile(
@@ -63,17 +50,11 @@ public class LLMKnowledgeBaseMatcher implements KnowledgeBaseMatcher {
             return DEFAULT_RESULT;
         }
 
-        String apiKeyToUse = getApiKey();
-        if (apiKeyToUse == null || apiKeyToUse.isEmpty()) {
-            log.warn("API key not configured for LLM matching");
-            return DEFAULT_RESULT;
-        }
-
         try {
             String prompt = buildPrompt(intentType, query, knowledgeBaseList);
             log.debug("Built LLM matching prompt: {}", prompt.length() > 500 ? prompt.substring(0, 500) + "..." : prompt);
 
-            String response = callLlm(prompt, apiKeyToUse);
+            String response = callLlm(prompt);
             log.debug("LLM matching response: {}", response);
 
             String datasetId = parseResponse(response);
@@ -85,13 +66,6 @@ public class LLMKnowledgeBaseMatcher implements KnowledgeBaseMatcher {
             log.debug("LLM matching exception", e);
             return DEFAULT_RESULT;
         }
-    }
-
-    private String getApiKey() {
-        if (apiKey != null && !apiKey.isEmpty()) {
-            return apiKey;
-        }
-        return System.getenv("DASHSCOPE_API_KEY");
     }
 
     private String buildPrompt(IntentType intentType, String query, List<KnowledgeBaseInfo> knowledgeBaseList) {
@@ -116,26 +90,13 @@ public class LLMKnowledgeBaseMatcher implements KnowledgeBaseMatcher {
         return sb.toString();
     }
 
-    private String callLlm(String prompt, String apiKey) {
-        DashScopeChatModel model = DashScopeChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(modelName)
-                .build();
-
-        ReActAgent agent = ReActAgent.builder()
-                .name("KB-Matcher")
-                .sysPrompt("You are a knowledge base classification expert. Select the most suitable knowledge base based on user intent and knowledge base information.")
-                .model(model)
-                .build();
-
-        Msg msg = Msg.builder()
-                .textContent(prompt)
-                .build();
-
-        Mono<Msg> responseMono = agent.call(msg);
-        Msg response = responseMono.block(Duration.ofSeconds(timeoutSeconds));
-
-        return response != null ? response.getTextContent() : "";
+    private String callLlm(String prompt) {
+        String response = chatClientBuilder.build().prompt()
+                .system("You are a knowledge base classification expert. Select the most suitable knowledge base based on user intent and knowledge base information.")
+                .user(prompt)
+                .call()
+                .content();
+        return response == null ? "" : response;
     }
 
     private String parseResponse(String response) {

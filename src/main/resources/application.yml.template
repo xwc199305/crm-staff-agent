@@ -4,6 +4,14 @@ server:
 spring:
   application:
     name: staff-agent
+  ai:
+    openai:
+      # DashScope exposes an OpenAI-compatible API and is consumed through Spring AI ChatClient.
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      api-key: ${agent.api-key:}
+      chat:
+        options:
+          model: qwen-max
   cloud:
     openfeign:
       client:
@@ -22,6 +30,8 @@ intent:
 conversation:
   timeout-minutes: 30
   cleanup-interval-ms: 300000
+  # Spring AI Alibaba Graph FileSystemSaver persists state by sessionId.
+  checkpoint-directory: ./data/graph-checkpoints
 
 dify:
   enabled: true
@@ -128,39 +138,11 @@ rag:
     3. 回答要清晰、简洁、有条理
     4. 可以适当使用 Markdown 格式提高可读性
 
-memory:
-  vector-dimensions: 1536
-  max-history-count: 50
-  max-tokens: 8000
-  top-k: 5
-  similarity-threshold: 0.4
-  embedding-model: text-embedding-v1
-  summary-enabled: true
-  async-embedding: true
-
-qdrant:
-  host: localhost
-  port: 6333
-  grpc-port: 6334
-  collection-name: conversation_messages
-  vector-dimensions: 1536
-  distance: cosine
-  index-type: hnsw
-  hnsw-m: 16
-  hnsw-ef-construct: 100
-  timeout-seconds: 30
-  auto-create-collection: true
-
-mem0:
-  enabled: true
-  server-url: http://localhost:8283
-  infer: true
-  top-k: 5
-
 streaming:
   enabled: true
 
 mcp:
   enabled: true
-  server-url: http://localhost:32790
+  # Salesforce MCP Streamable HTTP endpoint.
+  server-url: http://localhost:32790/mcp
   timeout-seconds: 10

@@ -1,6 +1,5 @@
 package com.example.staffagent.service.impl;
 
-import com.example.staffagent.context.ConversationContextHolder;
 import com.example.staffagent.dify.dto.DifyResponse;
 import com.example.staffagent.service.StreamingChatService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -61,12 +60,6 @@ public class StreamingChatServiceImpl implements StreamingChatService {
                     .collect(Collectors.toList());
 
             String context = recordsToJson(limitedRecords);
-
-            String historyContext = ConversationContextHolder.getContext();
-            if (historyContext != null && !historyContext.isEmpty()) {
-                context = historyContext + "\n\n[Knowledge Base Context]:\n" + context;
-                log.debug("Added history context to streaming RAG, history length={}", historyContext.length());
-            }
 
             String prompt = buildPrompt(query, context);
             log.info("Generating streaming RAG prompt, context length={}", context.length());

@@ -8,6 +8,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class McpProperties {
 
     private boolean enabled = true;
-    private String serverUrl = "http://localhost:32790";
+    private String serverUrl = "http://localhost:32790/mcp";
     private int timeoutSeconds = 10;
 }

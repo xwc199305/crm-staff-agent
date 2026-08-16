@@ -42,12 +42,17 @@ public class IntentHandlerFactory {
     }
 
     public String handleWithToolCall(String query, IntentType intentType) {
+        return handleWithToolCall(query, intentType, "");
+    }
+
+    public String handleWithToolCall(String query, IntentType intentType, String conversationContext) {
         ToolType toolType = intentType.getToolType();
         log.info("Intent {} mapped to tool {}", intentType, toolType);
 
         return switch (toolType) {
-            case KNOWLEDGE_BASE -> toolCallService.callKnowledgeBase(query, intentType);
+            case KNOWLEDGE_BASE -> toolCallService.callKnowledgeBase(query, intentType, conversationContext);
             case MCP_WEATHER -> toolCallService.callWeather(query);
+            case MCP_ORDER -> toolCallService.callOrder(query, conversationContext);
             case DIRECT_RESPONSE -> handleDirectResponse(query, intentType);
         };
     }
